@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Header from "@/components/Header";
 import Sidebar from "@/components/Sidebar";
 import BottomNav from "@/components/BottomNav";
@@ -8,6 +9,7 @@ import { Bitcoin, TrendingUp, TrendingDown, Star, DollarSign } from "lucide-reac
 
 const Home = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const navigate = useNavigate();
 
   const topMarkets = [
     { pair: "BTC/USDT", price: "112,095.1", change: "+2.42%", isPositive: true },
@@ -37,7 +39,10 @@ const Home = () => {
                 <Bitcoin className="h-6 w-6 text-primary" />
               </div>
             </div>
-            <Button className="w-full bg-gradient-primary hover:opacity-90 transition-opacity">
+            <Button 
+              onClick={() => navigate("/deposit")}
+              className="w-full bg-gradient-primary hover:opacity-90 transition-opacity"
+            >
               <DollarSign className="h-4 w-4 mr-2" />
               Quick Deposit
             </Button>
