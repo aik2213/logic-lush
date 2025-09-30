@@ -70,6 +70,7 @@ const Asset = () => {
                 <Button
                   variant="outline"
                   className="flex flex-col gap-1 h-auto py-3"
+                  onClick={() => navigate("/transfer")}
                 >
                   <ArrowLeftRight className="h-5 w-5 text-primary" />
                   <span className="text-xs">Transfer</span>
@@ -145,6 +146,7 @@ const Asset = () => {
                 <Button
                   variant="outline"
                   className="flex flex-col gap-1 h-auto py-3"
+                  onClick={() => navigate("/transfer")}
                 >
                   <ArrowLeftRight className="h-5 w-5 text-primary" />
                   <span className="text-xs">Transfer</span>
