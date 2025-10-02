@@ -1,15 +1,19 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Header from "@/components/Header";
 import Sidebar from "@/components/Sidebar";
 import BottomNav from "@/components/BottomNav";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { TrendingUp, TrendingDown } from "lucide-react";
 
 const Option = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [amount, setAmount] = useState("50");
   const [selectedTime, setSelectedTime] = useState("30");
+  const [showCountdown, setShowCountdown] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+  const [tradeType, setTradeType] = useState<"rise" | "fall">("rise");
 
   const timeOptions = [
     { time: "30", rate: "40%" },
@@ -17,6 +21,24 @@ const Option = () => {
     { time: "90", rate: "60%" },
     { time: "120", rate: "70%" },
   ];
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (showCountdown && countdown > 0) {
+      interval = setInterval(() => {
+        setCountdown((prev) => prev - 1);
+      }, 1000);
+    } else if (countdown === 0 && showCountdown) {
+      setShowCountdown(false);
+    }
+    return () => clearInterval(interval);
+  }, [showCountdown, countdown]);
+
+  const handleBuy = (type: "rise" | "fall") => {
+    setTradeType(type);
+    setCountdown(parseInt(selectedTime));
+    setShowCountdown(true);
+  };
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -99,11 +121,17 @@ const Option = () => {
 
         {/* Buy Buttons */}
         <div className="grid grid-cols-2 gap-4 mb-6">
-          <Button className="h-16 bg-gradient-success hover:opacity-90 text-lg font-bold">
+          <Button
+            onClick={() => handleBuy("rise")}
+            className="h-16 bg-gradient-success hover:opacity-90 text-lg font-bold"
+          >
             <TrendingUp className="h-6 w-6 mr-2" />
             Buy Rise
           </Button>
-          <Button className="h-16 bg-gradient-danger hover:opacity-90 text-lg font-bold">
+          <Button
+            onClick={() => handleBuy("fall")}
+            className="h-16 bg-gradient-danger hover:opacity-90 text-lg font-bold"
+          >
             <TrendingDown className="h-6 w-6 mr-2" />
             Buy Fall
           </Button>
@@ -119,6 +147,66 @@ const Option = () => {
           </div>
         </div>
       </main>
+
+      <Dialog open={showCountdown} onOpenChange={setShowCountdown}>
+        <DialogContent className="max-w-sm p-0 overflow-hidden border-2">
+          <div className="p-8 text-center">
+            <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full mb-4 ${
+              tradeType === "rise" ? "bg-success/20" : "bg-destructive/20"
+            }`}>
+              {tradeType === "rise" ? (
+                <TrendingUp className={`h-8 w-8 text-success`} />
+              ) : (
+                <TrendingDown className={`h-8 w-8 text-destructive`} />
+              )}
+            </div>
+
+            <h3 className="text-lg font-semibold mb-2">
+              {tradeType === "rise" ? "Buy Rise" : "Buy Fall"}
+            </h3>
+
+            <div className="mb-4 text-sm text-muted-foreground">
+              <div>Amount: {amount} USDT</div>
+              <div>Duration: {selectedTime}s</div>
+            </div>
+
+            <div className="relative w-48 h-48 mx-auto mb-4">
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-6xl font-bold text-foreground">
+                  {countdown}
+                </div>
+              </div>
+              <svg className="w-full h-full transform -rotate-90">
+                <circle
+                  cx="96"
+                  cy="96"
+                  r="88"
+                  stroke="currentColor"
+                  strokeWidth="8"
+                  fill="none"
+                  className="text-secondary"
+                />
+                <circle
+                  cx="96"
+                  cy="96"
+                  r="88"
+                  stroke="currentColor"
+                  strokeWidth="8"
+                  fill="none"
+                  className={tradeType === "rise" ? "text-success" : "text-destructive"}
+                  strokeDasharray={`${2 * Math.PI * 88}`}
+                  strokeDashoffset={`${2 * Math.PI * 88 * (1 - countdown / parseInt(selectedTime))}`}
+                  style={{ transition: "stroke-dashoffset 1s linear" }}
+                />
+              </svg>
+            </div>
+
+            <p className="text-sm text-muted-foreground">
+              Contract in progress...
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <BottomNav />
     </div>
