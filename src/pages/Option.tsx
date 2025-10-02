@@ -1,19 +1,52 @@
 import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import Header from "@/components/Header";
 import Sidebar from "@/components/Sidebar";
 import BottomNav from "@/components/BottomNav";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { TrendingUp, TrendingDown } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { TrendingUp, TrendingDown, Loader2 } from "lucide-react";
+import { cryptoService } from "@/services/cryptoService";
+import { optionService } from "@/services/optionService";
+import { memberService } from "@/services/memberService";
+import { useToast } from "@/hooks/use-toast";
 
 const Option = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [amount, setAmount] = useState("50");
   const [selectedTime, setSelectedTime] = useState("30");
+  const [selectedCryptoId, setSelectedCryptoId] = useState<number | null>(null);
   const [showCountdown, setShowCountdown] = useState(false);
   const [countdown, setCountdown] = useState(0);
   const [tradeType, setTradeType] = useState<"rise" | "fall">("rise");
+  const [currentOrderId, setCurrentOrderId] = useState<number | null>(null);
+  const { toast } = useToast();
+
+  const { data: cryptocurrencies, isLoading: loadingCrypto } = useQuery({
+    queryKey: ['cryptocurrencies'],
+    queryFn: cryptoService.getTradableCryptocurrencies,
+  });
+
+  const { data: member } = useQuery({
+    queryKey: ['currentMember'],
+    queryFn: memberService.getCurrentMember,
+  });
+
+  const { data: pendingOrders } = useQuery({
+    queryKey: ['pendingOrders', member?.id],
+    queryFn: () => member?.id ? optionService.getPendingOrders(member.id) : Promise.resolve([]),
+    enabled: !!member?.id,
+  });
+
+  const selectedCrypto = cryptocurrencies?.find(c => c.id === selectedCryptoId);
+
+  useEffect(() => {
+    if (cryptocurrencies && cryptocurrencies.length > 0 && !selectedCryptoId) {
+      setSelectedCryptoId(cryptocurrencies[0].id);
+    }
+  }, [cryptocurrencies, selectedCryptoId]);
 
   const timeOptions = [
     { time: "30", rate: "40%" },
@@ -34,10 +67,67 @@ const Option = () => {
     return () => clearInterval(interval);
   }, [showCountdown, countdown]);
 
-  const handleBuy = (type: "rise" | "fall") => {
-    setTradeType(type);
-    setCountdown(parseInt(selectedTime));
-    setShowCountdown(true);
+  const handleBuy = async (type: "rise" | "fall") => {
+    if (!member) {
+      toast({
+        title: "Authentication Required",
+        description: "Please sign in to place orders",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!selectedCrypto) {
+      toast({
+        title: "No Cryptocurrency Selected",
+        description: "Please select a cryptocurrency to trade",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const amountNum = parseFloat(amount);
+    if (isNaN(amountNum) || amountNum <= 0) {
+      toast({
+        title: "Invalid Amount",
+        description: "Please enter a valid amount",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const duration = parseInt(selectedTime);
+      const profitRate = timeOptions.find(t => t.time === selectedTime)?.rate || "40%";
+      const rate = parseFloat(profitRate.replace('%', ''));
+
+      const order = await optionService.createOrder({
+        member_id: member.id,
+        cryptocurrency_id: selectedCrypto.id,
+        order_type: type,
+        amount: amountNum,
+        duration: duration,
+        profit_rate: rate,
+        start_price: selectedCrypto.current_price,
+      });
+
+      setCurrentOrderId(order.id);
+      setTradeType(type);
+      setCountdown(duration);
+      setShowCountdown(true);
+
+      toast({
+        title: "Order Placed",
+        description: `${type === 'rise' ? 'Buy Rise' : 'Buy Fall'} order placed successfully`,
+      });
+    } catch (error) {
+      console.error('Error creating order:', error);
+      toast({
+        title: "Order Failed",
+        description: "Failed to place order. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -46,17 +136,55 @@ const Option = () => {
       <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
 
       <main className="pt-14 px-4 max-w-lg mx-auto">
-        {/* Price Info */}
-        <div className="mt-6 mb-4 bg-card rounded-lg p-4 border border-border">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-xl font-bold text-foreground">BTC/USDT</h2>
-            <div className="text-success font-medium">+2.48%</div>
-          </div>
-          <div className="text-3xl font-bold text-foreground mb-1">112,164.04</div>
-          <div className="text-sm text-muted-foreground">
-            Available Balance: 176,250.00000000 USDT
-          </div>
+        {/* Cryptocurrency Selector */}
+        <div className="mt-6 mb-4">
+          <label className="text-sm font-semibold text-foreground mb-2 block">
+            Select Cryptocurrency
+          </label>
+          <Select
+            value={selectedCryptoId?.toString()}
+            onValueChange={(value) => setSelectedCryptoId(parseInt(value))}
+          >
+            <SelectTrigger className="bg-card border-border">
+              <SelectValue placeholder="Select a cryptocurrency" />
+            </SelectTrigger>
+            <SelectContent>
+              {cryptocurrencies?.map((crypto) => (
+                <SelectItem key={crypto.id} value={crypto.id.toString()}>
+                  {crypto.title} - {crypto.name.toUpperCase()}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
+
+        {/* Price Info */}
+        {selectedCrypto && (
+          <div className="mb-4 bg-card rounded-lg p-4 border border-border">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-xl font-bold text-foreground">
+                {selectedCrypto.title}/{selectedCrypto.currency_type?.toUpperCase() || 'USDT'}
+              </h2>
+              <div className={`font-medium ${selectedCrypto.price_change >= 0 ? 'text-success' : 'text-destructive'}`}>
+                {selectedCrypto.price_change >= 0 ? '+' : ''}{selectedCrypto.price_change}%
+              </div>
+            </div>
+            <div className="text-3xl font-bold text-foreground mb-1">
+              {selectedCrypto.current_price.toLocaleString()}
+            </div>
+            {member && (
+              <div className="text-sm text-muted-foreground">
+                Available Balance: {member.score.toLocaleString()} USDT
+              </div>
+            )}
+          </div>
+        )}
+
+        {loadingCrypto && (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        )}
 
         {/* Chart Placeholder */}
         <div className="mb-4 bg-card rounded-lg p-6 border border-border">
@@ -142,9 +270,35 @@ const Option = () => {
           <h3 className="text-sm font-semibold text-foreground mb-3">
             Open Positions
           </h3>
-          <div className="text-center text-muted-foreground text-sm py-4">
-            No open positions
-          </div>
+          {pendingOrders && pendingOrders.length > 0 ? (
+            <div className="space-y-3">
+              {pendingOrders.map((order: any) => (
+                <div key={order.id} className="bg-secondary/30 rounded-lg p-3 border border-border">
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <div className="font-semibold text-foreground">
+                        {order.cryptocurrency?.title || 'Unknown'}
+                      </div>
+                      <div className={`text-sm ${order.order_type === 'rise' ? 'text-success' : 'text-destructive'}`}>
+                        {order.order_type === 'rise' ? 'Buy Rise' : 'Buy Fall'}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-semibold text-foreground">{order.amount} USDT</div>
+                      <div className="text-sm text-muted-foreground">{order.duration}s</div>
+                    </div>
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Start: {order.start_price} | Rate: {order.profit_rate}%
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center text-muted-foreground text-sm py-4">
+              No open positions
+            </div>
+          )}
         </div>
       </main>
 
